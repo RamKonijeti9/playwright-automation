@@ -74,12 +74,16 @@ function appendSignupCredentials(email, password, phoneNumber) {
         const existingContent = fs.readFileSync(credentialsPath, 'utf8');
 
         if (existingContent.startsWith('email,password\n')) {
+            const existingRows = existingContent
+                .trimEnd()
+                .split('\n')
+                .slice(1)
+                .map((row) => `${row},""`)
+                .join('\n');
+
             fs.writeFileSync(
                 credentialsPath,
-                existingContent.replace(
-                    'email,password\n',
-                    'email,password,phone\n'
-                )
+                `email,password,phone\n${existingRows}\n`
             );
         }
     }
