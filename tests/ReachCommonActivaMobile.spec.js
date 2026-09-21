@@ -58,6 +58,28 @@ function saveLastSignupEmail(email) {
     );
 }
 
+function appendSignupCredentials(email, password) {
+    const credentialsPath = path.join(
+        __dirname,
+        '..',
+        '.playwright-state',
+        'signup-credentials.csv'
+    );
+
+    fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
+
+    if (!fs.existsSync(credentialsPath)) {
+        fs.writeFileSync(credentialsPath, 'email,password\n');
+    }
+
+    const csvValue = (value) => `"${value.replace(/"/g, '""')}"`;
+
+    fs.appendFileSync(
+        credentialsPath,
+        `${csvValue(email)},${csvValue(password)}\n`
+    );
+}
+
 // Ramdom Email Generator
 
 function getUniqueEmail() {
@@ -607,6 +629,7 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Checkout', exact: true }))
         .toBeVisible();
     saveLastSignupEmail(uniqueEmail);
+    appendSignupCredentials(uniqueEmail, TEST_DATA.password);
     console.log(`Last signup email saved for sign-in test: ${uniqueEmail}`);
 
     // const responseMessage = await captureNotification(page);
