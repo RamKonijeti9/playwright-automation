@@ -88,6 +88,12 @@ async function findPaymentFrame(context) {
     return null;
 }
 
+function hasPaymentUrl(context) {
+    return context.pages().some((openPage) =>
+        !openPage.isClosed() && /ippay\.com|hpp-test/i.test(openPage.url())
+    );
+}
+
 async function findCompletedPaymentPage(context) {
     for (const openPage of context.pages()) {
         if (openPage.isClosed()) {
@@ -190,19 +196,6 @@ function getClickableCta(page, text, { exact = false } = {}) {
         .first();
 }
 
-async function captureNotification(page) {
-
-    const notification = page.locator('div.rnc__notification-container--top-full');
-
-    await expect(notification).toBeVisible({timeout: 8000});
-
-    const message = await notification.innerText();
-
-    console.log(`Response Message: ${message}`);
-
-    return message;
-}
-
 // ---------------------------------------------------------
 // Test Case
 // ---------------------------------------------------------
@@ -251,18 +244,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     console.log("Plan BTG is Selected");
 
-    const selectPlanUL = getClickableCta(page, 'Select Plan');
-    
-    // Verify Select Plan CTA is visible 
-    //await expect(selectPlanUL).toBeVisible(); 
-    
-    // Verify Select Plan CTA is enabled 
-    //await expect(selectPlanUL).toBeEnabled();
-
-    //await selectPlanUL.click();
-
-    //console.log("Plan UL is Selected");
-
     // =====================================================
     // 3. Verify First Line is Selected...
     // =====================================================
@@ -279,18 +260,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
     
     console.log('ByTheGig line selected successfully.');
 
-    const addLineButtonUL = page.getByTestId('plan_plannsec_post_button_add_child_2');
-    
-    const removeLineButtonUL = page.getByTestId('plan_plannsec_post_button_remove_child_2');
-    
-    // Verify + button is available 
-    //await expect(addLineButtonUL).toBeVisible(); 
-    
-    // Verify - button is available 
-    //await expect(removeLineButtonUL).toBeVisible(); 
-    
-    //console.log('Unlimited line selected successfully.');
-
     // ======================================================== 
     // 4. ADD LINES UP TO MAXIMUM - 25 
     // Select Plan = Line 1 
@@ -299,15 +268,10 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // 1 Select Plan + 24 Plus clicks = 25 lines 
     // ========================================================
 
+    await expect(addLineButtonBTG).toBeEnabled();
+
     for (let line = 2; line <= TEST_DATA.maxLines; line++) 
         { 
-          // Verify + button is visible 
-          await expect(addLineButtonBTG).toBeVisible(); 
-
-          // Verify + button is enabled 
-          await expect(addLineButtonBTG).toBeEnabled(); 
-        
-          // Click + 
           await addLineButtonBTG.click(); 
         
           console.log(`Line ${line} selected.`); 
@@ -377,15 +341,10 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // Therefore 25 minus clicks are required.
     //  ========================================================
 
+    await expect(removeLineButtonBTG).toBeEnabled();
+
     for ( let line = TEST_DATA.maxLines; line >= 1; line-- ) 
         { 
-            // Verify - button is visible 
-            await expect(removeLineButtonBTG).toBeVisible();
-           
-            // Verify - button is enabled 
-            await expect(removeLineButtonBTG).toBeEnabled(); 
-           
-            // Click -  
             await removeLineButtonBTG.click(); 
             
             console.log(`Line removed. Remaining lines: ${line - 1}`); 
@@ -531,6 +490,8 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await selectPlanBTG.click();
 
     console.log('ByTheGig Plan selected again.');
+
+    const selectPlanUL = getClickableCta(page, 'Select Plan');
 
     await expect(selectPlanUL).toBeVisible(); 
     
@@ -722,10 +683,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
     saveLastSignupEmail(uniqueEmail);
     console.log(`Last signup email saved for sign-in test: ${uniqueEmail}`);
 
-    // const responseMessage = await captureNotification(page);
-    // const CartIMEI = await page.getByRole('textbox', {name : '0.imei'});
-    // CartIMEI.fill(TEST_DATA.imei);
-
     const BillingNumber = ContactNumber();
 
     const PhoneNumber = page
@@ -791,8 +748,13 @@ test('Reach Common Playwright Test', async ({ page }) => {
     );
 
     await expect.poll(
-        () => findPaymentFrame(page.context()),
+        () => hasPaymentUrl(page.context()),
         { timeout: 60000 }
+    ).toBeTruthy();
+
+    await expect.poll(
+        () => findPaymentFrame(page.context()),
+        { timeout: 30000 }
     ).toBeTruthy();
 
     const paymentTarget = await findPaymentFrame(page.context());
@@ -853,17 +815,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     console.log(`Payment completed and returned to: ${returnedPage.url()}`);
 
-       
-
-   /* const checkoutHeading = page.getByRole('heading', { name: 'Checkout', exact: true });
-
-    if (await checkoutHeading.count() > 0) {
-        await expect(checkoutHeading).toBeVisible();
-        console.log('Checkout page opened successfully.');
-    } else {
-        await captureNotification(page);
-    } */
-
     console.log( '================================================' ); 
 
     console.log( 'Reach Common Playwright Test completed successfully.' ); 
@@ -871,11 +822,4 @@ test('Reach Common Playwright Test', async ({ page }) => {
     console.log( '================================================' );
 
 
-    // =====================================================
-    // Debugging Only
-    // =====================================================
-
-   // await page.pause();
-
-
-})
+});
