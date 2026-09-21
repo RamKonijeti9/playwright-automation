@@ -88,6 +88,39 @@ async function findPaymentFrame(context) {
     return null;
 }
 
+async function findCompletedPaymentPage(context) {
+    for (const openPage of context.pages()) {
+        if (openPage.isClosed()) {
+            continue;
+        }
+
+        if (/reachmobileplatform\.com/i.test(openPage.url())
+            && !/\/checkout\b/i.test(openPage.url())) {
+            return openPage;
+        }
+
+        for (const frame of openPage.frames()) {
+            if (frame.isDetached()) {
+                continue;
+            }
+
+            try {
+                if (await frame
+                    .getByText(/payment (successful|complete)|transaction approved|thank you/i)
+                    .count() > 0) {
+                    return openPage;
+                }
+            } catch (error) {
+                if (!/detached|closed/i.test(error.message)) {
+                    throw error;
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 function saveLastSignupEmail(email) {
     const credentialsPath = path.join(__dirname, '..', '.playwright-state', 'last-signup.json');
 
@@ -802,7 +835,23 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await expect(SubmitPayment).toBeEnabled();
     await SubmitPayment.click();
 
-    
+    await expect.poll(
+        () => findCompletedPaymentPage(page.context()),
+        { timeout: 120000 }
+    ).toBeTruthy();
+
+    const returnedPage = await findCompletedPaymentPage(page.context());
+
+    if (!returnedPage) {
+        throw new Error('Payment did not complete or return to the Activa Mobile application.');
+    }
+
+    await returnedPage.bringToFront();
+    await expect(returnedPage).toHaveURL(/reachmobileplatform\.com/i);
+    await expect(returnedPage.getByRole('button', { name: /Plans/i }).first())
+        .toBeVisible();
+
+    console.log(`Payment completed and returned to: ${returnedPage.url()}`);
 
        
 
