@@ -33,6 +33,15 @@ function getRandomString(length) {
     return result.charAt(0).toUpperCase() + result.slice(1);
 }
 
+function generateRandom10DigitNumber() {
+    const firstDigit = Math.floor(Math.random() * 9) + 1;
+    const remainingDigits = Math.floor(Math.random() * 1_000_000_000)
+        .toString()
+        .padStart(9, '0');
+
+    return `${firstDigit}${remainingDigits}`;
+}
+
 // Ramdom Email Generator
 
 function getUniqueEmail() {
