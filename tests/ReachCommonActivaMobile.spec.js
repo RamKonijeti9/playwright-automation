@@ -390,7 +390,7 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // 7. Coverage Check
     // =====================================================
 
-    const checkCoverageButton = getClickableCta(page, 'Check Coverage');
+    const checkCoverageButton = getClickableCta(page, 'Check Coverage', { exact: true });
 
     await expect(checkCoverageButton).toBeVisible(); 
     
@@ -644,6 +644,8 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     await expect(page.getByRole('heading', { name: 'Checkout', exact: true }))
         .toBeVisible();
+    await expect(page.getByRole('button', { name: /Sign In/i }).first())
+        .toBeVisible();
     saveLastSignupEmail(uniqueEmail);
     console.log(`Last signup email saved for sign-in test: ${uniqueEmail}`);
 
@@ -653,7 +655,9 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     const BillingNumber = ContactNumber();
 
-    const PhoneNumber = page.getByRole('textbox', { name: 'phone' });
+    const PhoneNumber = page
+        .getByRole('textbox', { name: /phone/i })
+        .first();
 
     await expect(PhoneNumber).toBeVisible(); 
 
@@ -679,19 +683,24 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await expect(billingAddress).toBeVisible();
     await expect(billingAddress).toBeEnabled();
     await billingAddress.click();
-    await billingAddress.fill(TEST_DATA.address);
+    await billingAddress.fill('');
+    await billingAddress.pressSequentially('123 William Street', { delay: 50 });
 
     const billingAddressSuggestion = page
-        .getByRole('option')
-        .filter({ hasText: /123 William Street/i })
+        .locator('.pac-container .pac-item, [role="option"]')
         .first();
 
-    if (await billingAddressSuggestion.count() > 0) {
-        await billingAddressSuggestion.click();
-    } else {
-        await billingAddress.press('ArrowDown');
-        await billingAddress.press('Enter');
-    }
+    await expect(billingAddressSuggestion).toBeVisible({ timeout: 10000 });
+    await billingAddressSuggestion.click();
+
+    await expect(billingAddress).toHaveValue(/123 William Street/i);
+    await expect(page.getByRole('textbox', { name: 'City' }))
+        .toHaveValue(/.+/);
+    await expect(page.getByRole('textbox', { name: 'Select State' }))
+        .toHaveValue(/.+/);
+    await expect(page.getByRole('textbox', { name: 'ZIP code' }))
+        .toHaveValue(/.+/);
+    console.log(`Billing address entered: ${await billingAddress.inputValue()}`);
 
     const proceedToAddCardDetails = page.getByRole('button', {
         name: /Proceed to add card details/i
