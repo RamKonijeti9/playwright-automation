@@ -615,6 +615,37 @@ test('Reach Common Playwright Test', async ({ page }) => {
     console.log(`Number used: ${BillingNumber}`);
     console.log(`Formatted number displayed: ${await PhoneNumber.inputValue()}`);
 
+    const billingAddress = page
+        .getByRole('textbox', { name: /Street/i })
+        .or(page.getByPlaceholder(/address1/i))
+        .first();
+
+    await expect(billingAddress).toBeVisible();
+    await expect(billingAddress).toBeEnabled();
+    await billingAddress.click();
+    await billingAddress.fill(TEST_DATA.address);
+
+    const billingAddressSuggestion = page
+        .getByRole('option')
+        .filter({ hasText: /123 William Street/i })
+        .first();
+
+    if (await billingAddressSuggestion.count() > 0) {
+        await billingAddressSuggestion.click();
+    } else {
+        await billingAddress.press('ArrowDown');
+        await billingAddress.press('Enter');
+    }
+
+    const proceedToAddCardDetails = page.getByRole('button', {
+        name: /Proceed to add card details/i
+    });
+
+    await expect(proceedToAddCardDetails).toBeEnabled();
+
+    await proceedToAddCardDetails.click();
+
+    console.log('ProceedToAddCardDetails button clicked.');
 
 
        
