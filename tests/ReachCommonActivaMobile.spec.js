@@ -13,7 +13,9 @@ const TEST_DATA = {
     address: '123 william street',
     email: 'reachem54@gmail.com',
     password: 'Reach@123',
-    maxLines: 25
+    maxLines: 25,
+    CardNumber: '4000300020001000',
+    CVV: '999'
 };
 
 
@@ -46,6 +48,42 @@ function ContactNumber() {
 
 function getDigits(value) {
     return value.replace(/\D/g, '');
+}
+
+async function findFrameWithSelector(page, selector) {
+    for (const frame of page.frames()) {
+        if (frame.isDetached()) {
+            continue;
+        }
+
+        try {
+            if (await frame.locator(selector).count() > 0) {
+                return frame;
+            }
+        } catch (error) {
+            if (!/detached|closed/i.test(error.message)) {
+                throw error;
+            }
+        }
+    }
+
+    return null;
+}
+
+async function findPaymentFrame(context) {
+    for (const paymentPage of context.pages()) {
+        if (paymentPage.isClosed()) {
+            continue;
+        }
+
+        const frame = await findFrameWithSelector(paymentPage, '#cardNumber');
+
+        if (frame) {
+            return { page: paymentPage, frame };
+        }
+    }
+
+    return null;
 }
 
 function saveLastSignupEmail(email) {
@@ -711,7 +749,40 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await proceedToAddCardDetails.click();
 
     console.log('ProceedToAddCardDetails button clicked.');
+    console.log(
+        `Open pages after payment CTA: ${page.context().pages().map((openPage) => (
+            openPage.isClosed() ? 'closed' : openPage.url()
+        )).join(' | ')}`
+    );
 
+    await expect.poll(
+        () => findPaymentFrame(page.context()),
+        { timeout: 60000 }
+    ).toBeTruthy();
+
+    const paymentTarget = await findPaymentFrame(page.context());
+
+    if (!paymentTarget) {
+        throw new Error('Payment card form was not found on any open page or frame.');
+    }
+
+    const paymentPage = paymentTarget.page;
+    const paymentFrame = paymentTarget.frame;
+
+    await paymentPage.bringToFront();
+    console.log(`Payment Page URL: ${paymentPage.url()}`);
+
+    const IPPAYCard = paymentFrame.locator('#cardNumber');
+
+    await expect(IPPAYCard).toBeVisible();
+    await expect(IPPAYCard).toBeEnabled();
+    await IPPAYCard.fill(TEST_DATA.CardNumber);
+
+    const IPPAYCVV = paymentFrame.locator('#cvv');
+
+    await expect(IPPAYCVV).toBeVisible();
+    await expect(IPPAYCVV).toBeEnabled();
+    await IPPAYCVV.fill(TEST_DATA.CVV);
 
        
 
@@ -735,7 +806,7 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // Debugging Only
     // =====================================================
 
-    // await page.pause();
+   // await page.pause();
 
 
 })
