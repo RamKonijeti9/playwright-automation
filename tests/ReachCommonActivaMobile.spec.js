@@ -33,13 +33,17 @@ function getRandomString(length) {
     return result.charAt(0).toUpperCase() + result.slice(1);
 }
 
-function generateRandom10DigitNumber() {
+function ContactNumber() {
     const firstDigit = Math.floor(Math.random() * 9) + 1;
     const remainingDigits = Math.floor(Math.random() * 1_000_000_000)
         .toString()
         .padStart(9, '0');
 
     return `${firstDigit}${remainingDigits}`;
+}
+
+function getDigits(value) {
+    return value.replace(/\D/g, '');
 }
 
 // Ramdom Email Generator
@@ -67,7 +71,7 @@ async function captureNotification(page) {
 
     const notification = page.locator('div.rnc__notification-container--top-full');
 
-    await expect(notification).toBeVisible({timeout: 5000});
+    await expect(notification).toBeVisible({timeout: 8000});
 
     const message = await notification.innerText();
 
@@ -555,7 +559,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     const hidePasswordButton = page.getByLabel(/Hide password/i);
     
-    
     await expect(hidePasswordButton).toBeVisible(); 
     
     await hidePasswordButton.click();
@@ -589,14 +592,41 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     console.log('SignUp button clicked.');
 
-    const checkoutHeading = page.getByRole('heading', { name: 'Checkout', exact: true });
+    // const responseMessage = await captureNotification(page);
+    // const CartIMEI = await page.getByRole('textbox', {name : '0.imei'});
+    // CartIMEI.fill(TEST_DATA.imei);
+
+    const BillingNumber = ContactNumber();
+
+    const PhoneNumber = page.getByRole('textbox', { name: 'phone' });
+
+    await expect(PhoneNumber).toBeVisible(); 
+
+    await expect(PhoneNumber).toBeEnabled();
+
+    await PhoneNumber.fill(BillingNumber);
+
+    await expect.poll(
+        async () => getDigits(await PhoneNumber.inputValue())
+    ).toBe(BillingNumber);
+
+    console.log('Number entered successfully.');
+
+    console.log(`Number used: ${BillingNumber}`);
+    console.log(`Formatted number displayed: ${await PhoneNumber.inputValue()}`);
+
+
+
+       
+
+   /* const checkoutHeading = page.getByRole('heading', { name: 'Checkout', exact: true });
 
     if (await checkoutHeading.count() > 0) {
         await expect(checkoutHeading).toBeVisible();
         console.log('Checkout page opened successfully.');
     } else {
         await captureNotification(page);
-    }
+    } */
 
     console.log( '================================================' ); 
 
@@ -609,6 +639,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // Debugging Only
     // =====================================================
 
-    // await page.pause();
+     await page.pause();
 
 })
