@@ -15,6 +15,8 @@ const TEST_DATA = {
     password: 'Reach@123',
     maxLines: 25,
     CardNumber: '4000300020001000',
+    ExpirationMonth: '06-Jun',
+    ExpirationYear: '2037',
     CVV: '999'
 };
 
@@ -778,11 +780,29 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await expect(IPPAYCard).toBeEnabled();
     await IPPAYCard.fill(TEST_DATA.CardNumber);
 
+    const ExpMonth = paymentFrame.locator('#CardExpMonth');
+    const ExpYear = paymentFrame.locator('#CardExpYear');
+    const SubmitPayment = paymentFrame.locator('#submit');
+
     const IPPAYCVV = paymentFrame.locator('#cvv');
 
     await expect(IPPAYCVV).toBeVisible();
     await expect(IPPAYCVV).toBeEnabled();
     await IPPAYCVV.fill(TEST_DATA.CVV);
+
+    await expect(ExpMonth).toBeVisible();
+    await expect(ExpMonth).toBeEnabled();
+    await ExpMonth.selectOption({ label: TEST_DATA.ExpirationMonth });
+
+    await expect(ExpYear).toBeVisible();
+    await expect(ExpYear).toBeEnabled();
+    await ExpYear.selectOption({ label: TEST_DATA.ExpirationYear });
+
+    await expect(SubmitPayment).toBeVisible();
+    await expect(SubmitPayment).toBeEnabled();
+    await SubmitPayment.click();
+
+    
 
        
 
