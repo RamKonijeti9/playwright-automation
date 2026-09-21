@@ -101,10 +101,23 @@ async function findCompletedPaymentPage(context) {
         }
 
         if (/reachmobileplatform\.com/i.test(openPage.url())
-            && !/\/checkout\b/i.test(openPage.url())) {
-            return openPage;
+            && !/\/(checkout|loader)\b/i.test(openPage.url())) {
+            const plansButton = openPage.getByRole('button', { name: 'Plans', exact: true }).first();
+            const signInButton = openPage.getByRole('button', { name: /Sign In/i }).first();
+
+            try {
+                if (await plansButton.isVisible() && !(await signInButton.isVisible())) {
+                    return openPage;
+                }
+            } catch (error) {
+                if (!/detached|closed/i.test(error.message)) {
+                    throw error;
+                }
+            }
         }
 
+    if (/reachmobileplatform\.com/i.test(openPage.url())
+        && !/\/(checkout|loader)\b/i.test(openPage.url())) {
         for (const frame of openPage.frames()) {
             if (frame.isDetached()) {
                 continue;
@@ -810,10 +823,13 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     await returnedPage.bringToFront();
     await expect(returnedPage).toHaveURL(/reachmobileplatform\.com/i);
+    await expect(returnedPage).not.toHaveURL(/\/(checkout|loader)\b/i);
     await expect(returnedPage.getByRole('button', { name: /Plans/i }).first())
         .toBeVisible();
+    await expect(returnedPage.getByRole('button', { name: /Sign In/i }).first())
+        .not.toBeVisible();
 
-    console.log(`Payment completed and returned to: ${returnedPage.url()}`);
+    console.log(`Payment completed and returned to the authenticated home page: ${returnedPage.url()}`);
 
     console.log( '================================================' ); 
 
