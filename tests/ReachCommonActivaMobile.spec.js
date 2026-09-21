@@ -58,7 +58,7 @@ function saveLastSignupEmail(email) {
     );
 }
 
-function appendSignupCredentials(email, password) {
+function appendSignupCredentials(email, password, phoneNumber) {
     const credentialsPath = path.join(
         __dirname,
         '..',
@@ -69,14 +69,26 @@ function appendSignupCredentials(email, password) {
     fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
 
     if (!fs.existsSync(credentialsPath)) {
-        fs.writeFileSync(credentialsPath, 'email,password\n');
+        fs.writeFileSync(credentialsPath, 'email,password,phone\n');
+    } else {
+        const existingContent = fs.readFileSync(credentialsPath, 'utf8');
+
+        if (existingContent.startsWith('email,password\n')) {
+            fs.writeFileSync(
+                credentialsPath,
+                existingContent.replace(
+                    'email,password\n',
+                    'email,password,phone\n'
+                )
+            );
+        }
     }
 
     const csvValue = (value) => `"${value.replace(/"/g, '""')}"`;
 
     fs.appendFileSync(
         credentialsPath,
-        `${csvValue(email)},${csvValue(password)}\n`
+        `${csvValue(email)},${csvValue(password)},${csvValue(phoneNumber)}\n`
     );
 }
 
@@ -629,7 +641,6 @@ test('Reach Common Playwright Test', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Checkout', exact: true }))
         .toBeVisible();
     saveLastSignupEmail(uniqueEmail);
-    appendSignupCredentials(uniqueEmail, TEST_DATA.password);
     console.log(`Last signup email saved for sign-in test: ${uniqueEmail}`);
 
     // const responseMessage = await captureNotification(page);
@@ -654,6 +665,7 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     console.log(`Number used: ${BillingNumber}`);
     console.log(`Formatted number displayed: ${await PhoneNumber.inputValue()}`);
+    appendSignupCredentials(uniqueEmail, TEST_DATA.password, BillingNumber);
 
     const billingAddress = page
         .getByRole('textbox', { name: /Street/i })
