@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
 
 // ---------------------------------------------------------
 // Test Data
@@ -44,6 +46,16 @@ function ContactNumber() {
 
 function getDigits(value) {
     return value.replace(/\D/g, '');
+}
+
+function saveLastSignupEmail(email) {
+    const credentialsPath = path.join(__dirname, '..', '.playwright-state', 'last-signup.json');
+
+    fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
+    fs.writeFileSync(
+        credentialsPath,
+        JSON.stringify({ email, savedAt: new Date().toISOString() }, null, 2)
+    );
 }
 
 // Ramdom Email Generator
@@ -592,6 +604,11 @@ test('Reach Common Playwright Test', async ({ page }) => {
 
     console.log('SignUp button clicked.');
 
+    await expect(page.getByRole('heading', { name: 'Checkout', exact: true }))
+        .toBeVisible();
+    saveLastSignupEmail(uniqueEmail);
+    console.log(`Last signup email saved for sign-in test: ${uniqueEmail}`);
+
     // const responseMessage = await captureNotification(page);
     // const CartIMEI = await page.getByRole('textbox', {name : '0.imei'});
     // CartIMEI.fill(TEST_DATA.imei);
@@ -670,6 +687,7 @@ test('Reach Common Playwright Test', async ({ page }) => {
     // Debugging Only
     // =====================================================
 
-     await page.pause();
+     // await page.pause();
+
 
 })
