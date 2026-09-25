@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "shop:start": "node local-shop/server.js",
+    "test:shop": "npx playwright test --config=playwright.local-shop.config.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A small local shop for Playwright end-to-end practice.">
+    <title>Little Shop</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/shop.js" defer></script>
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/" aria-label="Little Shop home">Little Shop</a>
+        <a class="cart-link" href="#cart">Cart <span id="cart-count">0</span></a>
+    </header>
+
+    <main class="page">
+        <section class="intro" aria-labelledby="page-title">
+            <p class="eyebrow">A local practice store</p>
+            <h1 id="page-title">Everyday essentials</h1>
+            <p>Browse the catalog, build a cart, and complete a test purchase.</p>
+        </section>
+
+        <p id="app-message" class="message" role="status" aria-live="polite"></p>
+
+        <section aria-labelledby="products-title">
+            <div class="section-heading">
+                <h2 id="products-title">Products</h2>
+                <span>Prices in USD</span>
+            </div>
+            <div class="catalog-controls" aria-label="Product catalog filters">
+                <label for="product-search">Search products</label>
+                <input id="product-search" type="search" placeholder="Try “mug”">
+                <label for="category-filter">Category</label>
+                <select id="category-filter">
+                    <option value="all">All categories</option>
+                </select>
+                <label for="sort-products">Sort by</label>
+                <select id="sort-products">
+                    <option value="name">Name</option>
+                    <option value="price-asc">Price: low to high</option>
+                    <option value="price-desc">Price: high to low</option>
+                </select>
+                <button id="clear-filters" type="button" class="secondary-button">Clear filters</button>
+            </div>
+            <div id="products" class="product-grid" aria-live="polite"></div>
+            <p id="catalog-empty" class="empty-cart" hidden>No products match your filters.</p>
+        </section>
+
+        <section id="cart" class="cart-section" aria-labelledby="cart-title">
+            <div class="section-heading">
+                <h2 id="cart-title">Your cart</h2>
+                <span id="cart-item-count">0 items</span>
+            </div>
+            <div id="cart-items" class="cart-items">
+                <p class="empty-cart">Your cart is empty.</p>
+            </div>
+            <div class="coupon-controls">
+                <label for="coupon-code">Coupon code</label>
+                <input id="coupon-code" autocomplete="off" placeholder="SAVE10 or FREESHIP">
+                <button id="apply-coupon" type="button">Apply coupon</button>
+                <p id="coupon-message" role="status" aria-live="polite"></p>
+            </div>
+            <dl class="price-breakdown">
+                <div><dt>Subtotal</dt><dd id="cart-subtotal">$0.00</dd></div>
+                <div><dt>Discount</dt><dd id="cart-discount">$0.00</dd></div>
+                <div><dt>Shipping</dt><dd id="cart-shipping">$0.00</dd></div>
+                <div><dt>Estimated tax (8.25%)</dt><dd id="cart-tax">$0.00</dd></div>
+            </dl>
+            <p class="cart-total">Total <strong id="cart-total">$0.00</strong></p>
+        </section>
+
+        <section class="checkout-section" aria-labelledby="checkout-title">
+            <h2 id="checkout-title">Checkout</h2>
+            <form id="checkout-form">
+                <label for="customer-name">Full name</label>
+                <input id="customer-name" name="customerName" autocomplete="name"
+                    minlength="2" maxlength="100" required>
+                <label for="customer-email">Email address</label>
+                <input id="customer-email" name="customerEmail" type="email"
+                    autocomplete="email" required>
+                <button id="place-order" type="submit">Place order</button>
+            </form>
+        </section>
+
+        <section id="confirmation" class="confirmation" aria-live="polite" hidden></section>
+    </main>
+
+    <footer><p>Local test store · No real payments are processed.</p></footer>
+</body>
+</html>
