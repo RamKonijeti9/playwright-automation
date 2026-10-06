@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const MIN_DISCOUNT_PERCENT = 20;
-const MAX_PRODUCTS_TO_SCAN = 30;
+const MAX_PRODUCTS_PER_CATEGORY = 10;
 const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
 const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'meesho-discounts.csv');
 const DEFAULT_PRODUCT_SEARCH_TERMS = [
@@ -28,32 +28,25 @@ function parseRupees(text) {
 
 async function findDiscountedProducts(page, searchTerms) {
     const productsById = new Map();
+    let accessDeniedSearchTerm = '';
 
     for (const searchTerm of searchTerms) {
-        if (productsById.size >= MAX_PRODUCTS_TO_SCAN) {
-            break;
-        }
-
         await page.goto(
             `https://www.meesho.com/search?q=${encodeURIComponent(searchTerm)}`
         );
 
         const pageText = await page.locator('body').innerText();
         if (/access denied|don't have permission/i.test(pageText)) {
-            throw new Error(
-                `Meesho denied access while searching for "${searchTerm}".`
-            );
+            accessDeniedSearchTerm = searchTerm;
+            break;
         }
 
         const resultCards = page.locator('a[href*="/p/"]');
         await expect(resultCards.first()).toBeVisible({ timeout: 20000 });
 
         const count = await resultCards.count();
-        for (let index = 0; index < count; index += 1) {
-            if (productsById.size >= MAX_PRODUCTS_TO_SCAN) {
-                break;
-            }
-
+        const productsToScan = Math.min(count, MAX_PRODUCTS_PER_CATEGORY);
+        for (let index = 0; index < productsToScan; index += 1) {
             const card = resultCards.nth(index);
             const product = await card.evaluate((element, term) => {
                 const priceNodes = [...element.querySelectorAll('*')]
@@ -78,10 +71,15 @@ async function findDiscountedProducts(page, searchTerms) {
                     });
                 const productUrl = new URL(element.href, window.location.origin);
                 const productId = productUrl.pathname.match(/\/p\/([^/?#]+)/)?.[1] || '';
-                const name = (element.innerText || '')
+                const name = element.querySelector('[class*="ProductTitle"]')
+                    ?.textContent?.trim()
+                    || element.querySelector('img[alt]')?.getAttribute('alt')?.trim()
+                    || (element.innerText || '')
                     .split('\n')
                     .map((line) => line.trim())
-                    .find((line) => line && !/₹\s*[\d,]+/.test(line)) || '';
+                    .find((line) => line
+                        && !/₹\s*[\d,]+/.test(line)
+                        && !/\d{1,2}h\s*:\s*\d{1,2}m/i.test(line)) || '';
                 const currentPrice = priceNodes.find((price) => !price.isOriginalPrice);
                 const originalPrice = priceNodes.find((price) => price.isOriginalPrice);
 
@@ -106,7 +104,7 @@ async function findDiscountedProducts(page, searchTerms) {
         }
     }
 
-    return [...productsById.values()]
+    const products = [...productsById.values()]
         .filter((product) => Number.isFinite(product.currentPrice)
             && Number.isFinite(product.originalPrice)
             && product.originalPrice > product.currentPrice)
@@ -125,6 +123,8 @@ async function findDiscountedProducts(page, searchTerms) {
             };
         })
         .filter((product) => product.discountPercent > MIN_DISCOUNT_PERCENT);
+
+    return { products, accessDeniedSearchTerm };
 }
 
 function writeProductsCsv(products) {
@@ -173,10 +173,16 @@ test('List Meesho products with discounts above the threshold', async ({ page })
         throw new Error('Set MEESHO_PRODUCT_SEARCH_TERMS to one or more search terms.');
     }
 
-    const products = await findDiscountedProducts(page, searchTerms);
+    const { products, accessDeniedSearchTerm } = await findDiscountedProducts(page, searchTerms);
     writeProductsCsv(products);
 
     expect(fs.readFileSync(OUTPUT_FILE, 'utf8').split('\n'))
         .toHaveLength(products.length + 2);
     console.log(`Saved ${products.length} matching Meesho products to ${OUTPUT_FILE}`);
+    if (accessDeniedSearchTerm) {
+        console.warn(
+            `Meesho denied access for "${accessDeniedSearchTerm}". `
+            + 'The CSV contains results from categories scanned before access was denied.'
+        );
+    }
 });
