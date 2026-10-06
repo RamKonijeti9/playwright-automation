@@ -7,16 +7,19 @@ const MAX_PRODUCTS_TO_SCAN = 30;
 const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
 const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'flipkart-discounts.csv');
 const DEFAULT_PRODUCT_SEARCH_TERMS = [
-    'mobile phone',
-    'running shoes',
-    'mens shirt',
-    'headphones',
-    'smart watch',
-    'kitchen mixer',
-    'toys',
-    'novel book',
-    'bedsheet',
-    'backpack'
+    'fashion',
+    'mobile phones',
+    'electronics',
+    'beauty products',
+    'home essentials',
+    'home appliances',
+    'toys and baby products',
+    'food and health',
+    'auto accessories',
+    'sports and fitness',
+    'furniture',
+    'books',
+    'two wheelers'
 ];
 
 async function findProductsWithDiscount(page, searchTerms) {
@@ -24,10 +27,6 @@ async function findProductsWithDiscount(page, searchTerms) {
     const matchingProducts = [];
 
     for (const searchTerm of searchTerms) {
-        if (scannedProductIds.size >= MAX_PRODUCTS_TO_SCAN) {
-            break;
-        }
-
         await page.goto(
             `https://www.flipkart.com/search?q=${encodeURIComponent(searchTerm)}`
         );
@@ -134,7 +133,7 @@ function writeProductsCsv(products) {
     fs.writeFileSync(OUTPUT_FILE, csv, 'utf8');
 }
 
-test('List high-discount products from ten different Flipkart categories', async ({ page }) => {
+test('List high-discount products across Flipkart categories', async ({ page }) => {
     const searchTerms = (process.env.FLIPKART_PRODUCT_SEARCH_TERMS
         || DEFAULT_PRODUCT_SEARCH_TERMS.join(','))
         .split(',')
