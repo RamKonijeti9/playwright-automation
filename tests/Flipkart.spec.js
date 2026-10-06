@@ -1,6 +1,10 @@
 const { test, expect } = require('@playwright/test');
 
-test('Flipkart user can sign in', async ({ page }) => {
+const PRODUCT_PRICE_LIMIT_RUPEES = 10;
+const MAX_PRODUCTS_TO_SCAN = 10;
+const DEFAULT_PRODUCT_SEARCH_TERMS = ['pencil', 'eraser', 'pen', 'sharpener'];
+
+async function signIn(page) {
     const email = process.env.FLIPKART_EMAIL;
     const password = process.env.FLIPKART_PASSWORD;
     const otp = process.env.FLIPKART_OTP;
@@ -56,4 +60,119 @@ test('Flipkart user can sign in', async ({ page }) => {
     await expect(accountMenu).toBeVisible();
     await accountMenu.click();
     await expect(page.getByRole('link', { name: /My Profile/i })).toBeVisible();
+}
+
+async function findProductsBelowPrice(page, searchTerms) {
+    const productsByUrl = new Map();
+    const scannedProductIds = new Set();
+    const scannedProducts = [];
+
+    for (const searchTerm of searchTerms) {
+        if (scannedProductIds.size >= MAX_PRODUCTS_TO_SCAN) {
+            break;
+        }
+
+        await page.goto(
+            `https://www.flipkart.com/search?q=${encodeURIComponent(searchTerm)}`
+        );
+
+        const pricedProductLinks = page
+            .locator('a[href*="/p/"]')
+            .filter({ hasText: /₹\s*[\d,]+(?:\.\d{1,2})?/ });
+        await expect(pricedProductLinks.first()).toBeVisible({ timeout: 15000 });
+
+        const count = await pricedProductLinks.count();
+        for (let index = 0; index < count; index += 1) {
+            if (scannedProductIds.size >= MAX_PRODUCTS_TO_SCAN) {
+                break;
+            }
+
+            const productLink = pricedProductLinks.nth(index);
+            const href = await productLink.getAttribute('href');
+            if (!href) {
+                continue;
+            }
+
+            const parsedProductUrl = new URL(href, 'https://www.flipkart.com');
+            const productUrl = parsedProductUrl.toString();
+            const productId = parsedProductUrl.searchParams.get('pid')
+                || parsedProductUrl.pathname;
+            if (scannedProductIds.has(productId)) {
+                continue;
+            }
+            scannedProductIds.add(productId);
+
+            const cardText = (await productLink.locator('..').innerText())
+                .replace(/\s+/g, ' ')
+                .trim();
+            const priceMatch = cardText.match(/₹\s*([\d,]+(?:\.\d{1,2})?)/);
+            if (!priceMatch) {
+                continue;
+            }
+
+            const priceRupees = Number(priceMatch[1].replace(/,/g, ''));
+            if (!Number.isFinite(priceRupees)) {
+                continue;
+            }
+
+            const name = cardText.slice(0, priceMatch.index).trim()
+                || new URL(productUrl).pathname.split('/').filter(Boolean)[0];
+            scannedProducts.push({ name, priceRupees });
+            if (priceRupees >= PRODUCT_PRICE_LIMIT_RUPEES) {
+                continue;
+            }
+
+            productsByUrl.set(productId, { name, priceRupees, url: productUrl });
+        }
+    }
+
+    return {
+        scannedProducts,
+        affordableProducts: [...productsByUrl.values()]
+    };
+}
+
+test('Flipkart user adds search results priced below ₹10 to cart', async ({ page }) => {
+    await signIn(page);
+
+    const searchTerms = (process.env.FLIPKART_PRODUCT_SEARCH_TERMS
+        || DEFAULT_PRODUCT_SEARCH_TERMS.join(','))
+        .split(',')
+        .map((term) => term.trim())
+        .filter(Boolean);
+    if (searchTerms.length === 0) {
+        throw new Error('Set FLIPKART_PRODUCT_SEARCH_TERMS to one or more search terms.');
+    }
+
+    const { scannedProducts, affordableProducts } =
+        await findProductsBelowPrice(page, searchTerms);
+    console.log(
+        `First ${scannedProducts.length} inspected search products (name and price):`,
+        JSON.stringify(scannedProducts, null, 2)
+    );
+    console.log(
+        `Products priced below ₹${PRODUCT_PRICE_LIMIT_RUPEES} among the first ${MAX_PRODUCTS_TO_SCAN} search results:`,
+        JSON.stringify(affordableProducts, null, 2)
+    );
+
+    test.skip(
+        affordableProducts.length === 0,
+        `No products below ₹${PRODUCT_PRICE_LIMIT_RUPEES} were found in the current search results.`
+    );
+
+    for (const product of affordableProducts) {
+        await page.goto(product.url);
+        const addToCartButton = page.getByRole('button', {
+            name: /add to cart/i
+        }).first();
+        await expect(addToCartButton).toBeVisible();
+        await expect(addToCartButton).toBeEnabled();
+        await addToCartButton.click();
+        await expect(page.getByText(/added to cart|added to your cart/i))
+            .toBeVisible({ timeout: 10000 });
+
+        console.log(
+            `Added to cart: ${product.name} — ₹${product.priceRupees.toFixed(2)}`
+        );
+    }
 });
