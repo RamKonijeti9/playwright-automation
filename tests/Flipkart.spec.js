@@ -2,7 +2,18 @@ const { test, expect } = require('@playwright/test');
 
 const MIN_DISCOUNT_PERCENT = 90;
 const MAX_PRODUCTS_TO_SCAN = 10;
-const DEFAULT_PRODUCT_SEARCH_TERMS = ['pencil', 'eraser', 'pen', 'sharpener'];
+const DEFAULT_PRODUCT_SEARCH_TERMS = [
+    'mobile phone',
+    'running shoes',
+    'mens shirt',
+    'headphones',
+    'smart watch',
+    'kitchen mixer',
+    'toys',
+    'novel book',
+    'bedsheet',
+    'backpack'
+];
 
 async function findProductsWithDiscount(page, searchTerms) {
     const scannedProductIds = new Set();
@@ -17,52 +28,67 @@ async function findProductsWithDiscount(page, searchTerms) {
             `https://www.flipkart.com/search?q=${encodeURIComponent(searchTerm)}`
         );
 
-        const pricedProductLinks = page
-            .locator('a[href*="/p/"]')
-            .filter({ hasText: /₹\s*[\d,]+(?:\.\d{1,2})?/ });
-        await expect(pricedProductLinks.first()).toBeVisible({ timeout: 15000 });
+        const productCards = await page.locator('a[href*="/p/"]').evaluateAll((links) => {
+            const ids = new Set();
 
-        const resultCount = await pricedProductLinks.count();
-        for (let index = 0; index < resultCount; index += 1) {
-            if (scannedProductIds.size >= MAX_PRODUCTS_TO_SCAN) {
-                break;
-            }
+            return links.flatMap((link) => {
+                const url = new URL(link.href);
+                const productId = url.searchParams.get('pid') || url.pathname;
+                const text = (link.innerText || '').replace(/\s+/g, ' ').trim();
+                const priceValues = [link, ...link.querySelectorAll('*')]
+                    .filter((element) => element.children.length === 0)
+                    .map((element) => element.textContent.trim().match(
+                        /^₹\s*([\d,]+(?:\.\d{1,2})?)$/
+                    ))
+                    .filter(Boolean)
+                    .map((match) => Number(match[1].replace(/,/g, '')));
 
-            const productLink = pricedProductLinks.nth(index);
-            const href = await productLink.getAttribute('href');
-            if (!href) {
-                continue;
-            }
+                if (ids.has(productId) || priceValues.length < 2) {
+                    return [];
+                }
+                ids.add(productId);
 
-            const productUrl = new URL(href, 'https://www.flipkart.com');
-            const productId = productUrl.searchParams.get('pid') || productUrl.pathname;
-            if (scannedProductIds.has(productId)) {
-                continue;
-            }
-            scannedProductIds.add(productId);
+                const currentPrice = priceValues[0];
+                const originalPrice = priceValues[1];
+                if (!Number.isFinite(currentPrice)
+                    || !Number.isFinite(originalPrice)
+                    || originalPrice <= 0
+                    || currentPrice >= originalPrice) {
+                    return [];
+                }
 
-            const cardText = (await productLink.locator('..').innerText())
-                .replace(/\s+/g, ' ')
-                .trim();
-            const discountMatch = cardText.match(/(\d{1,3})\s*%\s*off/i);
-            if (!discountMatch) {
-                continue;
-            }
+                const firstPriceIndex = text.search(/₹\s*[\d,]+(?:\.\d{1,2})?/);
+                const name = text.slice(0, firstPriceIndex).trim()
+                    .replace(/^Add to Compare\s*/i, '')
+                    || url.pathname.split('/').filter(Boolean)[0];
 
-            const discountPercent = Number(discountMatch[1]);
-            if (discountPercent <= MIN_DISCOUNT_PERCENT) {
-                continue;
-            }
+                return [{
+                    productId,
+                    name,
+                    currentPrice,
+                    originalPrice,
+                    url: url.toString()
+                }];
+            });
+        });
 
-            const priceMatch = cardText.match(/₹\s*([\d,]+(?:\.\d{1,2})?)/);
-            const name = cardText.slice(0, priceMatch?.index ?? discountMatch.index).trim()
-                || productUrl.pathname.split('/').filter(Boolean)[0];
+        const product = productCards.find((item) => !scannedProductIds.has(item.productId));
+        if (!product) {
+            continue;
+        }
 
+        scannedProductIds.add(product.productId);
+        const discountPercent = (
+            (product.originalPrice - product.currentPrice) / product.originalPrice
+        ) * 100;
+
+        if (discountPercent > MIN_DISCOUNT_PERCENT) {
             matchingProducts.push({
-                name,
-                price: priceMatch ? `₹${priceMatch[1]}` : 'Price not found',
-                discountPercent,
-                url: productUrl.toString()
+                name: product.name,
+                priceRupees: product.currentPrice,
+                originalPriceRupees: product.originalPrice,
+                discountPercent: Number(discountPercent.toFixed(2)),
+                url: product.url
             });
         }
     }
@@ -70,7 +96,7 @@ async function findProductsWithDiscount(page, searchTerms) {
     return matchingProducts;
 }
 
-test('List the first ten Flipkart products with discounts above 90%', async ({ page }) => {
+test('List high-discount products from ten different Flipkart categories', async ({ page }) => {
     const searchTerms = (process.env.FLIPKART_PRODUCT_SEARCH_TERMS
         || DEFAULT_PRODUCT_SEARCH_TERMS.join(','))
         .split(',')
@@ -84,7 +110,7 @@ test('List the first ten Flipkart products with discounts above 90%', async ({ p
     const products = await findProductsWithDiscount(page, searchTerms);
 
     console.log(
-        `Products with discounts greater than ${MIN_DISCOUNT_PERCENT}% among the first ${MAX_PRODUCTS_TO_SCAN} search results:`
+        `Products with discounts greater than ${MIN_DISCOUNT_PERCENT}% from up to ${MAX_PRODUCTS_TO_SCAN} different categories:`
     );
     console.log(JSON.stringify(products, null, 2));
 });
