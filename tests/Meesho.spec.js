@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const MIN_DISCOUNT_PERCENT = 40;
+const MIN_DISCOUNT_PERCENT = 20;
 const MAX_PRODUCTS_TO_SCAN = 30;
 const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
 const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'meesho-discounts.csv');
