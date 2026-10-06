@@ -7,16 +7,18 @@ const MAX_PRODUCTS_TO_SCAN = 30;
 const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
 const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'meesho-discounts.csv');
 const DEFAULT_PRODUCT_SEARCH_TERMS = [
-    'kurti',
-    'mens shirt',
-    'running shoes',
-    'wireless earbuds',
-    'smart watch',
-    'kitchen mixer',
-    'toys',
-    'bedsheet',
-    'backpack',
-    'saree'
+    'women ethnic wear',
+    'women western wear',
+    'men fashion',
+    'kids clothing',
+    'home essentials',
+    'beauty & personal care',
+    'jewellery',
+    'bags & luggage',
+    'footwear',
+    'electronics',
+    'grocery',
+    'books'
 ];
 
 function parseRupees(text) {
