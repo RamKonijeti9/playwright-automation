@@ -1,7 +1,11 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const MIN_DISCOUNT_PERCENT = 90;
-const MAX_PRODUCTS_TO_SCAN = 10;
+const MIN_DISCOUNT_PERCENT = 40;
+const MAX_PRODUCTS_TO_SCAN = 30;
+const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
+const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'flipkart-discounts.csv');
 const DEFAULT_PRODUCT_SEARCH_TERMS = [
     'mobile phone',
     'running shoes',
@@ -84,6 +88,7 @@ async function findProductsWithDiscount(page, searchTerms) {
 
         if (discountPercent > MIN_DISCOUNT_PERCENT) {
             matchingProducts.push({
+                searchTerm,
                 name: product.name,
                 priceRupees: product.currentPrice,
                 originalPriceRupees: product.originalPrice,
@@ -94,6 +99,39 @@ async function findProductsWithDiscount(page, searchTerms) {
     }
 
     return matchingProducts;
+}
+
+function writeProductsCsv(products) {
+    const columns = [
+        'search_term',
+        'product_name',
+        'selling_price_inr',
+        'original_price_inr',
+        'discount_percent',
+        'product_url'
+    ];
+    const csvCell = (value) => {
+        let text = String(value ?? '');
+        if (/^[=+\-@]/.test(text)) {
+            text = `'${text}`;
+        }
+        return `"${text.replace(/"/g, '""')}"`;
+    };
+    const rows = products.map((product) => [
+        product.searchTerm,
+        product.name,
+        product.priceRupees,
+        product.originalPriceRupees,
+        product.discountPercent,
+        product.url
+    ]);
+    const csv = [
+        columns.map(csvCell).join(','),
+        ...rows.map((row) => row.map(csvCell).join(','))
+    ].join('\n') + '\n';
+
+    fs.mkdirSync(OUTPUT_DIRECTORY, { recursive: true });
+    fs.writeFileSync(OUTPUT_FILE, csv, 'utf8');
 }
 
 test('List high-discount products from ten different Flipkart categories', async ({ page }) => {
@@ -108,9 +146,6 @@ test('List high-discount products from ten different Flipkart categories', async
     }
 
     const products = await findProductsWithDiscount(page, searchTerms);
-
-    console.log(
-        `Products with discounts greater than ${MIN_DISCOUNT_PERCENT}% from up to ${MAX_PRODUCTS_TO_SCAN} different categories:`
-    );
-    console.log(JSON.stringify(products, null, 2));
+    writeProductsCsv(products);
+    expect(fs.readFileSync(OUTPUT_FILE, 'utf8').split('\n')).toHaveLength(products.length + 2);
 });
