@@ -2,8 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const MIN_DISCOUNT_PERCENT = 40;
-const MAX_PRODUCTS_TO_SCAN = 30;
+const MIN_DISCOUNT_PERCENT = 70;
 const OUTPUT_DIRECTORY = path.join(__dirname, '..', '.playwright-state');
 const OUTPUT_FILE = path.join(OUTPUT_DIRECTORY, 'flipkart-discounts.csv');
 const DEFAULT_PRODUCT_SEARCH_TERMS = [
@@ -46,7 +45,7 @@ async function findProductsWithDiscount(page, searchTerms) {
                     .filter(Boolean)
                     .map((match) => Number(match[1].replace(/,/g, '')));
 
-                if (ids.has(productId) || priceValues.length < 2) {
+                if (!productId || ids.has(productId) || priceValues.length < 2) {
                     return [];
                 }
                 ids.add(productId);
@@ -70,34 +69,125 @@ async function findProductsWithDiscount(page, searchTerms) {
                     name,
                     currentPrice,
                     originalPrice,
+                    discountPercent: Number(
+                        (((originalPrice - currentPrice) / originalPrice) * 100).toFixed(2)
+                    ),
                     url: url.toString()
                 }];
             });
         });
 
-        const product = productCards.find((item) => !scannedProductIds.has(item.productId));
-        if (!product) {
-            continue;
-        }
+        for (const product of productCards) {
+            if (scannedProductIds.has(product.productId)) {
+                continue;
+            }
+            scannedProductIds.add(product.productId);
 
-        scannedProductIds.add(product.productId);
-        const discountPercent = (
-            (product.originalPrice - product.currentPrice) / product.originalPrice
-        ) * 100;
-
-        if (discountPercent > MIN_DISCOUNT_PERCENT) {
-            matchingProducts.push({
-                searchTerm,
-                name: product.name,
-                priceRupees: product.currentPrice,
-                originalPriceRupees: product.originalPrice,
-                discountPercent: Number(discountPercent.toFixed(2)),
-                url: product.url
-            });
+            if (product.discountPercent > MIN_DISCOUNT_PERCENT) {
+                matchingProducts.push({
+                    searchTerm,
+                    productId: product.productId,
+                    name: product.name,
+                    priceRupees: product.currentPrice,
+                    originalPriceRupees: product.originalPrice,
+                    discountPercent: product.discountPercent,
+                    url: product.url
+                });
+            }
         }
     }
 
     return matchingProducts;
+}
+
+async function readProductDetails(page, product) {
+    await page.goto(product.url);
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 20000 });
+
+    return page.evaluate(() => {
+        const lines = document.body.innerText
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const structuredProducts = [...document.querySelectorAll(
+            'script[type="application/ld+json"]'
+        )].flatMap((script) => {
+            try {
+                const data = JSON.parse(script.textContent || 'null');
+                const values = Array.isArray(data) ? data : [data];
+                return values.flatMap((value) => {
+                    const graph = value?.['@graph'];
+                    return Array.isArray(graph) ? [value, ...graph] : [value];
+                });
+            } catch (error) {
+                return [];
+            }
+        });
+        const structuredProduct = structuredProducts.find((value) => {
+            const types = Array.isArray(value?.['@type'])
+                ? value['@type']
+                : [value?.['@type']];
+            return types.includes('Product');
+        }) || {};
+        const structuredOffers = Array.isArray(structuredProduct.offers)
+            ? structuredProduct.offers[0]
+            : structuredProduct.offers || {};
+        const nextLineFor = (labels) => {
+            const labelIndex = lines.findIndex((line) => labels.includes(line));
+            return labelIndex >= 0 ? lines[labelIndex + 1] || '' : '';
+        };
+        const h1 = document.querySelector('h1')?.innerText.trim() || '';
+        const titleIndex = lines.findIndex((line) => line === h1);
+        const productSectionLines = titleIndex >= 0
+            ? lines.slice(titleIndex, lines.findIndex(
+                (line, index) => index > titleIndex
+                    && /Features, description and more/i.test(line)
+            ) > titleIndex
+                ? lines.findIndex((line, index) => index > titleIndex
+                    && /Features, description and more/i.test(line))
+                : undefined)
+            : lines;
+        const sellerIndex = productSectionLines.findIndex((line) => /^Seller:/i.test(line));
+        const sellerName = sellerIndex >= 0
+            ? productSectionLines[sellerIndex].replace(/^Seller:\s*/i, '')
+            : '';
+        const sellerContext = sellerIndex >= 0
+            ? productSectionLines.slice(sellerIndex + 1, sellerIndex + 8)
+            : [];
+        const sellerRating = sellerContext.find((line) => /^\d(?:\.\d)?$/.test(line)) || '';
+        const sellerTenure = sellerContext.find((line) => /\byears? with Flipkart\b/i.test(line)) || '';
+        const offerLines = [...new Set(productSectionLines.filter((line) =>
+            /bank offers?|cashback|no cost emi|emi\b|buy at|₹\s*[\d,]+\s+off|exchange offer/i
+                .test(line)
+        ))];
+        const rating = structuredProduct.aggregateRating || {};
+        const brand = typeof structuredProduct.brand === 'string'
+            ? structuredProduct.brand
+            : structuredProduct.brand?.name || '';
+        return {
+            title: structuredProduct.name || h1,
+            brand,
+            model: structuredProduct.model || nextLineFor(['Model Name', 'Model']),
+            color: structuredProduct.color || nextLineFor([
+                'Selected Color:',
+                'Selected Colour:',
+                'Color',
+                'Colour'
+            ]),
+            category: structuredProduct.category || '',
+            rating: rating.ratingValue ?? '',
+            ratingCount: rating.ratingCount ?? '',
+            reviewCount: rating.reviewCount ?? '',
+            sellerName,
+            sellerRating,
+            sellerTenure,
+            sellerInfo: sellerContext.join(' | '),
+            offers: offerLines.join(' | '),
+            availability: String(structuredOffers.availability || '')
+                .split('/').pop(),
+            returnPolicy: structuredOffers.hasMerchantReturnPolicy?.description || ''
+        };
+    });
 }
 
 function writeProductsCsv(products) {
@@ -107,6 +197,20 @@ function writeProductsCsv(products) {
         'selling_price_inr',
         'original_price_inr',
         'discount_percent',
+        'brand',
+        'model',
+        'color',
+        'category',
+        'rating',
+        'rating_count',
+        'review_count',
+        'seller_name',
+        'seller_rating',
+        'seller_tenure',
+        'seller_info',
+        'offers',
+        'availability',
+        'return_policy',
         'product_url'
     ];
     const csvCell = (value) => {
@@ -122,6 +226,20 @@ function writeProductsCsv(products) {
         product.priceRupees,
         product.originalPriceRupees,
         product.discountPercent,
+        product.brand,
+        product.model,
+        product.color,
+        product.category,
+        product.rating,
+        product.ratingCount,
+        product.reviewCount,
+        product.sellerName,
+        product.sellerRating,
+        product.sellerTenure,
+        product.sellerInfo,
+        product.offers,
+        product.availability,
+        product.returnPolicy,
         product.url
     ]);
     const csv = [
@@ -134,6 +252,8 @@ function writeProductsCsv(products) {
 }
 
 test('List high-discount products across Flipkart categories', async ({ page }) => {
+    test.setTimeout(300000);
+
     const searchTerms = (process.env.FLIPKART_PRODUCT_SEARCH_TERMS
         || DEFAULT_PRODUCT_SEARCH_TERMS.join(','))
         .split(',')
@@ -145,6 +265,17 @@ test('List high-discount products across Flipkart categories', async ({ page }) 
     }
 
     const products = await findProductsWithDiscount(page, searchTerms);
-    writeProductsCsv(products);
+    const detailedProducts = [];
+    for (const [index, product] of products.entries()) {
+        console.log(
+            `Opening filtered product ${index + 1}/${products.length}: ${product.name}`
+        );
+        const details = await readProductDetails(page, product);
+        detailedProducts.push({ ...product, ...details });
+    }
+
+    writeProductsCsv(detailedProducts);
     expect(fs.readFileSync(OUTPUT_FILE, 'utf8').split('\n')).toHaveLength(products.length + 2);
+    console.log(JSON.stringify(detailedProducts, null, 2));
+    console.log(`Saved ${detailedProducts.length} detailed products to ${OUTPUT_FILE}`);
 });
